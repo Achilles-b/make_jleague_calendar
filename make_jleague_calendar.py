@@ -1,29 +1,55 @@
 import pandas as pd
+import requests
+from bs4 import BeautifulSoup
+import csv
 import datetime
 import os
+import logging
+
+from make_jleague_calendar_const import MakeJleagueCalendarConst as const
 
 class MakeJleagueCalendar():
-    def __init__():
-        pass
+    # クラス変数
+    BASE_URL = const.BASE_URL
 
-    def main():
-        print("hoge")
+    def __init__(self):
+        # こちらはインスタンス変数
+        self.base_url = MakeJleagueCalendar.BASE_URL
 
-    def scraping():
+        # loggerの設定
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.DEBUG)
+
+        # TODOloggerの設定
+        # formatter = logging.Formatter('%(asctime)s:%(levelname)s:%(message)s')
+        # file_handler = logging.FileHandler('jleague.log')
+        # file_handler.setFormatter(formatter)
+        # self.logger.addHandler(file_handler)
+    
+    def main(self):
+        # set URL
+        url_for_get_teamid = f"{self.base_url}search?teamType=1"
+        table_for_get_teamid = self.scraping(url_for_get_teamid, "scheduleTable")
+
+        self.logger.debug(table_for_get_teamid)
+
+    def scraping(self, url:str, tableclass:str) -> BeautifulSoup:
         """
         スクレイピングを行って元データを取得する
         """
-        
-        url = f"https://data.j-league.or.jp/SFMS01/search?competition_years={year}&competition_frame_ids=1&competition_frame_ids=11&team_ids={team_id}&home_away_select=0&tv_relay_station_name="
+        # get HTML
+        self.responce= requests.get(url)
+        self.html = self.responce.text
 
+        # make beautifulsoup object
+        self.soup = BeautifulSoup(self.html, 'html.parser')
+        self.logger.debug(self.soup)
 
+        # get table data
+        self.table = self.soup('table', class_=tableclass)
 
-url = "https://data.j-league.or.jp/SFMS01/search?competition_years=2023&competition_frame_ids=1&competition_frame_ids=11&team_ids=18&home_away_select=0&tv_relay_station_name="
-df = pd.read_html(url, attrs={'class': 'table-base00 search-table'}, skiprows=0)
-print(type(df))
-print(df)
+        return self.table
 
 if __name__ == '__main__':
-
     make_jleague_calendar = MakeJleagueCalendar()
     make_jleague_calendar.main()
