@@ -39,29 +39,6 @@ class MakeJleagueCalendar():
 
         # csvで結果を出力
         self.output_csv()
-
-    # def scraping(self, url:str, tableclass:str) -> BeautifulSoup:
-    #     """
-    #     スクレイピングを行って元データを取得する
-    #     """
-    #     try:
-    #         # get HTML
-    #         response = requests.get(url)
-    #         html = response.text
-
-    #         # make beautifulsoup object
-    #         soup = BeautifulSoup(html, 'html.parser')
-    #         self.logger.debug(soup)
-
-    #         # get table data
-    #         table = soup('table', class_=tableclass)
-    #         self.logger.debug(table)
-    #         return table
-        
-    #     except Exception as e:
-    #         self.logger.error(f"Something wrong, error: {str(e)}")
-    #         return None
-
     
     def scraping_get_team_id(self) -> pd.DataFrame:
         """
