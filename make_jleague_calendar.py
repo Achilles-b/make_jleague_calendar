@@ -1,10 +1,13 @@
+import csv
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 import logging
 from typing import Tuple
 import os
+import sys
 import shutil
+from datetime import datetime
 
 from make_jleague_calendar_const import MakeJleagueCalendarConst as const
 
@@ -19,26 +22,28 @@ class MakeJleagueCalendar():
         # loggerの設定
         self.logger = logging.getLogger(__name__)
         self.logger.addHandler(logging.StreamHandler())
-        self.logger.setLevel(logging.INFO)
-
-        # TODO: loggerの設定
-        # formatter = logging.Formatter('%(asctime)s:%(levelname)s:%(message)s')
-        # file_handler = logging.FileHandler('jleague.log')
-        # file_handler.setFormatter(formatter)
-        # self.logger.addHandler(file_handler)
+        self.logger.setLevel(logging.DEBUG)
     
     def main(self):
         # スクレイピングによりチームIDとチーム名の対応表を取得
+        self.logger.info("処理No1：スクレイピングによりチームIDとチーム名を取得")
         df_team_id = self.scraping_get_team_id()
 
         # 対象チーム名を入力し、それに対応するチームIDを取得
+        self.logger.info("処理No2：カレンダーを作成したいチームを指定")
         self.team_name, team_id = self.input_team_name(df_team_id)
 
         # チームIDをもとにスクレイピングをし、取得したい年のスケジュールを得る
+        self.logger.info("処理No3：対象チーム・対象年度のスケジュール取得")
         self.df_schedule, self.schedule_year = self.scraping_get_schedule(team_id)
 
+        # dfをGoogleカレンダー登録用に整形
+        self.logger.info("処理No4：データの整形")
+        self.edited_df = self.edit_df(self.df_schedule)
+        
         # csvで結果を出力
-        self.output_csv()
+        self.logger.info("処理No5：データの出力")
+        self.output_csv(self.edited_df)
     
     def scraping_get_team_id(self) -> pd.DataFrame:
         """
@@ -89,7 +94,6 @@ class MakeJleagueCalendar():
 
         except Exception as e:
             self.logger.error(str(e))
-            return None
 
 
     def input_team_name(self, df_team:pd.DataFrame) -> Tuple[str, int]:
@@ -108,7 +112,6 @@ class MakeJleagueCalendar():
             
         except:
             self.logger.error("正しくデータ取得ができなかったため終了します")
-            return None, None
         
     def scraping_get_schedule(self, team_id:int) -> Tuple[pd.DataFrame, int]:
         """取得したチームIDをもとにスクレイピングを行い、スケジュールを取得
@@ -145,34 +148,56 @@ class MakeJleagueCalendar():
                     data.append(row_data)
 
             df_scledule = pd.DataFrame(data, columns=columns)
-            self.logger.debug(df_scledule)
+            self.logger.debug(f"columns: {df_scledule.columns}")
+            self.logger.debug(f"df_schedule.head: {df_scledule.head()}")
 
             return df_scledule, year
         
         except Exception as e:
             self.logger.error(str(e))
-
-            return None, None
+            
+    def edit_df(self, df_schedule: pd.DataFrame) -> pd.DataFrame:
+        """
+        DataFrameをGoogleカレンダーに登録できる形に成形する
+        Args:
+            df_schedule (pd.DataFrame): スクレイピングで取得したデータフレーム
         
-    def output_csv(self) -> None:
+        Returns:
+            pd.DataFrame: 整形後のDataFrame
+        """
+        try:
+            # 必要なカラムを選択し、日付や時間を整形する
+            edited_df = pd.DataFrame({
+                'Subject': df_schedule['ホーム'] + ' vs ' + df_schedule['アウェイ'] + ' @ ' + df_schedule['スタジアム'],
+                'Start Date': '2023/' + df_schedule['試合日'].str[:2] + '/' + df_schedule['試合日'].str[3:5],
+                'End Date': '2023/' + df_schedule['試合日'].str[:2] + '/' + df_schedule['試合日'].str[3:5],
+                'Start Time': df_schedule['K/O時刻'],
+                'End Time': pd.to_datetime(df_schedule['K/O時刻']) + pd.to_timedelta('2 hours')
+            })
+
+
+            # # カラムを結合する
+            # edited_df['Subject'] = edited_df['Subject'] + ' ' + edited_df['Start Date'].dt.strftime('%m/%d(%a)')
+            # edited_df['Start Time'] = edited_df['Start Date'].dt.strftime('%m/%d/%Y ') + edited_df['Start Time'].astype(str)
+            # edited_df['End Time'] = edited_df['End Date'].dt.strftime('%m/%d/%Y ') + edited_df['End Time'].astype(str)
+
+            self.logger.debug(f"edited_df: {edited_df.head()}")
+            return edited_df
+
+        except Exception as e:
+            self.logger.error(str(e))
+            sys.exit
+
+
+    def output_csv(self, edited_df) -> None:
         """
         dataframeをcsvに変換し、出力する
 
         Args:
             None
         """
-        # CSVファイルの出力
-        csv_file_path = f"JLeagueSChedule_{self.team_name}_{self.schedule_year}.csv"
-        self.df_schedule.to_csv(csv_file_path, index=False)
-        self.logger.debug(self.df_schedule.head())
-
         # make_jleague_calendar.pyの実行ファイルが存在するディレクトリを取得
         script_dir = os.path.dirname(__file__)
-        self.logger.debug(f"csv_file_path:{csv_file_path}")
-
-        # 出力したCSVファイルのパス
-        csv_path = os.path.join(script_dir, csv_file_path)
-        self.logger.debug(f"csv_path:{csv_path}")
 
         # ディレクトリを作成
         data_dir = os.path.join(script_dir, 'data')
@@ -183,8 +208,15 @@ class MakeJleagueCalendar():
             os.makedirs(data_dir)
             self.logger.debug(f"data_dir: {data_dir}")
 
-        # dataディレクトリにCSVファイルを移動
-        shutil.move(csv_file_path, os.path.join(data_dir, csv_file_path))
+        # データフレームをcsvに変換
+        self.logger.info("データフレームをcsvに変換します。")
+
+        now = datetime.now()
+        now_string = now.strftime("%Y%m%d%H%M%S")
+        csv_file_path = f"JLeagueSChedule_{self.team_name}_{self.schedule_year}_{now_string}.csv"
+        schedule_csv = edited_df.to_csv(os.path.join(data_dir, csv_file_path), index=False)
+
+        self.logger.info("データフレームをcsvに変換しました。")
 
 
 if __name__ == '__main__':
